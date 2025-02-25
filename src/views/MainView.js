@@ -14,6 +14,9 @@ function MainView() {
 
   return (
     <div>
+      {role === "Admin" && (
+        <h1>Only you as an {role} can see this</h1>
+      )}
       <h1>You are {role}</h1>
       <button onClick={handleLogout} style={{ marginTop: "20px" }}>Logout</button>
     </div>

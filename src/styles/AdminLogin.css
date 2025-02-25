@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&family=Montserrat:ital,wght@0,500;1,500&display=swap');
+
+#adminLoginView {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    background-color: #efefef;
+    padding:20px;
+}
+
+#backButton {
+    align-self: flex-start;
+    margin-bottom: 20px;
+    user-select: none;
+}
+
+.icon {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin: 0 5px;
+    transition: transform 0.2s ease;
+}
+
+.icon:hover {
+    transform: scale(1.2);
+}
+
+.inputContainer {
+    position: relative;
+    margin-bottom: 20px;
+}
+  
+.inputContainer:first-of-type {
+    padding-top: 0;
+}
+
+.inputContainer:last-of-type {
+    padding-bottom: 0;
+}
+
+.inputContainer label {
+    transition: all 0.3s ease;
+    transform-origin: left center;
+    color: #63b866;
+    font-weight: 100;
+    letter-spacing: 0.01em;
+    font-size: 17px;
+    box-sizing: border-box;
+    padding: 10px 15px;
+    display: block;
+    position: absolute;
+    user-select: none;
+    margin-top: -40px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.inputContainer input {
+    transition: all 0.3s ease;
+    appearance: none;
+    background-color: none;
+    border: 1px solid #63b866;
+    line-height: 0;
+    font-size: 17px;
+    width: 100%;
+    display: block;
+    box-sizing: border-box;
+    padding: 10px 15px;
+    border-radius: 60px;
+    color: #63b866;
+    font-weight: 100;
+    letter-spacing: 0.01em;
+    position: relative;
+    z-index: 1;
+}
+
+.inputContainer input:focus {
+    outline: none;
+    background: #63b866;
+    color: white;
+    margin-top: 30px;
+}
+
+.inputContainer input:valid {
+    margin-top: 30px;
+}
+
+.inputContainer input:focus ~ label {
+    transform: translate(0, -35px);
+}
+
+.inputContainer input:valid ~ label {
+    text-transform: uppercase;
+    font-family: "Montserrat", serif;
+    transform: translate(5px, -35px) scale(0.6);
+}
+
+.button {
+    width: 100px;
+    padding: 10px;
+    font-size: 16px;
+    background-color: #63b866;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s ease;
+    font-family: "Montserrat", serif;
+    transition: all 250ms;
+}
+
+.button:hover {
+  transform: scale(1.05);
+}

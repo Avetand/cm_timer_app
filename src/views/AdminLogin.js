@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase/firebaseConfig";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import './../styles/AdminLogin.css';
+import BackIcon from './../resources/icons/arrow-left.svg';
 
 function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -19,12 +21,27 @@ function AdminLogin() {
   };
 
   return (
-    <div>
-      <button onClick={() => navigate("/")} style={{ fontSize: "20px", cursor: "pointer" }}>⬅ Back</button>
-      <h2>Admin Login</h2>
-      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <button onClick={handleLogin}>Login</button>
+    <div id="adminLoginView">
+      <img src={BackIcon} alt="back" id="backButton" className="icon" onClick={() => navigate("/")}/>
+      <div className="inputContainer">
+        <input 
+          type="email" 
+          required
+          value={email} 
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <label>Email</label>
+      </div>
+      <div className="inputContainer">
+        <input 
+          type="password" 
+          required
+          value={password} 
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <label>Password</label>
+      </div>
+      <button onClick={handleLogin} className="button">Login</button>
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   );
