@@ -1,9 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { auth } from "../firebase/firebaseConfig";
+import { signInAnonymously } from "firebase/auth";
 import './../styles/RoleSelection.css';
 
 function RoleSelection() {
   const navigate = useNavigate();
+  const [error, setError] = useState("");
+
+  const handlePresenterSignIn = async () => {
+    try {
+      await signInAnonymously(auth);
+      navigate("/main-view");
+    } catch (err) {
+      setError(err.message);
+      console.error("Error signing in anonymously:", err);
+    }
+  };
 
   return (
     <div id="roleSelectionView">
@@ -15,7 +28,7 @@ function RoleSelection() {
         >Admin
         </button>
         <button 
-          onClick={() => navigate("/main-view", { state: { role: "Presenter" } })}
+          onClick={handlePresenterSignIn}
           className="button"
         >Presenter
         </button>
