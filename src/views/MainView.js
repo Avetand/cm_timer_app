@@ -18,6 +18,13 @@ function MainView() {
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Timer and Stopwatch State
+  const [currentPresenterIndex, setCurrentPresenterIndex] = useState(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [totalTimes, setTotalTimes] = useState({}); // Store total times for each presenter {presenterId: timeInSeconds}
+
   const isAdminCached = useMemo(() => {
     if (!user) return false;
     return false;
@@ -111,9 +118,81 @@ function MainView() {
   const isFormValid = useMemo(() => {
     return name && duration && duration > 0 && duration <= 60;
   }, [name, duration]);
+
+
+  // Timer and Stopwatch Logic
+
+  const startTimer = useCallback(() => {
+    if (presenters.length === 0) return; // Prevent starting with no presenters
+    setCurrentPresenterIndex(0);
+    setTimerSeconds(presenters[0].duration * 60); // Convert minutes to seconds
+    setStopwatchSeconds(0);
+    setIsRunning(true);
+  }, [presenters]);
+
+  const nextPresenter = useCallback(() => {
+    if (!isRunning) return;
+
+    // Store the total time for the current presenter
+    setTotalTimes(prevTimes => ({
+      ...prevTimes,
+      [presenters[currentPresenterIndex].id]: stopwatchSeconds,
+    }));
+
+    const nextIndex = currentPresenterIndex + 1;
+
+    if (nextIndex < presenters.length) {
+      setCurrentPresenterIndex(nextIndex);
+      setTimerSeconds(presenters[nextIndex].duration * 60);
+      setStopwatchSeconds(0); // Reset stopwatch for the new presenter
+    } else {
+      // Finish the presentation
+      setTotalTimes(prevTimes => ({
+        ...prevTimes,
+        [presenters[currentPresenterIndex].id]: stopwatchSeconds,
+      }));
+      setIsRunning(false);
+      setCurrentPresenterIndex(null);
+      setTimerSeconds(0);
+      setStopwatchSeconds(0);
+    }
+  }, [currentPresenterIndex, presenters, isRunning, stopwatchSeconds]);
+
+  // useEffect for Timer
+  useEffect(() => {
+    let interval = null;
+
+    if (isRunning && currentPresenterIndex !== null) {
+      interval = setInterval(() => {
+        setTimerSeconds((prevSeconds) => prevSeconds - 1);
+        setStopwatchSeconds((prevSeconds) => prevSeconds + 1);
+      }, 1000);
+    }
+
+    return () => clearInterval(interval); // Cleanup on unmount or when isRunning changes
+  }, [isRunning, currentPresenterIndex]);
+
+  // Format Time (mm:ss)
+  const formatTime = (seconds) => {
+    const minutes = Math.abs(Math.floor(seconds / 60));
+    const remainingSeconds = Math.abs(seconds % 60);
+    const sign = seconds < 0 ? "+" : "";
+    return `${sign}${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  };
+
+  // Overtime styling
+  const timerStyle = {
+    color: timerSeconds < 0 ? 'red' : 'black'
+  };
+
+  const currentPresenter = useMemo(() => {
+    return currentPresenterIndex !== null ? presenters[currentPresenterIndex] : null;
+  }, [currentPresenterIndex, presenters]);
+
   if (loading) {
     return <div>Loading...</div>;
   }
+
   return (
     <div id="mainView">
       <div id="contentWrapper">
@@ -147,8 +226,28 @@ function MainView() {
                 {editId ? "Modify" : "Add"}
               </button>
             </div>
+            <div>
+              {!isRunning && (
+                <button onClick={startTimer} disabled={isRunning || presenters.length === 0}>
+                  Start
+                </button>
+              )}
+              {isRunning && (
+                <button onClick={nextPresenter}>
+                  {currentPresenterIndex === presenters.length - 1 ? "Finish" : "Next"}
+                </button>
+              )}
+            </div>
           </div>
         )}
+
+        {isRunning && currentPresenter && (
+          <div id="timerPanel">
+            <div id="currentTimer" style={timerStyle}>{formatTime(timerSeconds)}</div>
+            <div id="currentPresenter">{currentPresenter.name}</div>
+          </div>
+        )}
+
         <div id="presentersPanel" className="wrapper">
           <img src={LogoutIcon} alt="logout" id="logoutButton" onClick={handleLogout} />
           <table>
@@ -157,8 +256,8 @@ function MainView() {
                 <th>#</th>
                 <th>Name</th>
                 <th>Duration</th>
-                <th>Total time</th>
-                {isAdmin && (<th>Actions</th>)}
+                {isRunning && (<th>Total time</th>)}
+                {isAdmin && !isRunning && (<th>Actions</th>)}
               </tr>
             </thead>
             <tbody>
@@ -167,8 +266,10 @@ function MainView() {
                   <td>{index + 1}</td>
                   <td>{presenter.name}</td>
                   <td>{presenter.duration} min</td>
-                  <td>{/* total time */}</td>
-                  {isAdmin && (
+                  {isRunning && (
+                    <td>{formatTime(totalTimes[presenter.id] || 0)}</td>
+                  )}
+                  {isAdmin && !isRunning && (
                     <td>
                       <img src={EditIcon} alt="edit" className="icon" onClick={() => handleEditPresenter(presenter)} />
                       <img src={DeleteIcon} alt="delete" className="icon" onClick={() => handleDeletePresenter(presenter.id)} />
