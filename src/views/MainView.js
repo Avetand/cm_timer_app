@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { auth } from "../firebase/firebaseConfig";
 import { useNavigate } from "react-router-dom";
 import { collection, addDoc, getDocs, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
@@ -12,11 +12,16 @@ function MainView() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
-
   const [name, setName] = useState("");
   const [duration, setDuration] = useState("");
   const [presenters, setPresenters] = useState([]);
   const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const isAdminCached = useMemo(() => {
+    if (!user) return false;
+    return false;
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -30,9 +35,12 @@ function MainView() {
         } catch (error) {
           console.error("Error checking admin role:", error);
           setIsAdmin(false);
+        } finally {
+          setLoading(false);
         }
       } else {
         setIsAdmin(false);
+        setLoading(false);
       }
     });
     return () => unsubscribe();
@@ -47,17 +55,17 @@ function MainView() {
     });
     return () => unsubscribe();
   }, []);
-
-  const handleLogout = async () => {
+  
+  const handleLogout = useCallback(async () => {
     try {
       await auth.signOut();
       navigate("/");
     } catch (error) {
       console.error("Error signing out:", error);
     }
-  };
+  }, [navigate]);
 
-  const handleAddOrUpdatePresenter = async () => {
+  const handleAddOrUpdatePresenter = useCallback(async () => {
     if (!name || !duration) return;
     if (duration < 1 || duration > 60) {
       setDuration("");
@@ -71,7 +79,7 @@ function MainView() {
           name,
           duration: parseInt(duration, 10)
         });
-        setEditId(null);
+          setEditId(null);
       } else {
         await addDoc(presentersCollection, {
           name,
@@ -84,69 +92,72 @@ function MainView() {
     } catch (error) {
       console.error("Error adding/updating presenter:", error);
     }
-  };
+  }, [name, duration, editId]);
 
-  const handleDeletePresenter = async (id) => {
+  const handleDeletePresenter = useCallback(async (id) => {
     try {
       await deleteDoc(doc(db, "presenters", id));
     } catch (error) {
       console.error("Error deleting presenter:", error);
     }
-  };
+  }, []);
 
-  const handleEditPresenter = (presenter) => {
+  const handleEditPresenter = useCallback((presenter) => {
     setName(presenter.name);
-    setDuration(presenter.duration);
+    setDuration(presenter.duration.toString());
     setEditId(presenter.id);
-  };
+  }, []);
 
-  if (!user) {
+  const isFormValid = useMemo(() => {
+    return name && duration && duration > 0 && duration <= 60;
+  }, [name, duration]);
+  if (loading) {
     return <div>Loading...</div>;
   }
-
   return (
     <div id="mainView">
       <div id="contentWrapper">
         {isAdmin && (
-        <div id="adminPanel" className="wrapper">
-          <div id="addForm">
-            <input 
-              type="text" 
-              required
-              placeholder="Presenter Name"
-              value={name} 
-              onChange={(e) => setName(e.target.value)}
-            />
-            <input 
-              type="number" 
-              required
-              placeholder="Duration (min)"
-              value={duration} 
-              min="1"
-              max="60"
-              onChange={(e) => setDuration(e.target.value)}
-            />
-            <button 
-              onClick={handleAddOrUpdatePresenter} 
-              style={{
-                backgroundColor: name && duration && duration > 1 &&  duration < 60 ? "#63b866" : "gray",
-                cursor: name && duration ? "pointer" : "not-allowed"
-              }}
-              disabled={!name || !duration}
-            >
-              {editId ? "Modify" : "Add"}
-            </button>
+          <div id="adminPanel" className="wrapper">
+            <div id="addForm">
+              <input
+                type="text"
+                required
+                placeholder="Presenter Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <input
+                type="number"
+                required
+                placeholder="Duration (min)"
+                value={duration}
+                min="1"
+                max="60"
+                onChange={(e) => setDuration(e.target.value)}
+              />
+              <button
+                onClick={handleAddOrUpdatePresenter}
+                style={{
+                  backgroundColor: isFormValid ? "#63b866" : "gray",
+                  cursor: isFormValid ? "pointer" : "not-allowed"
+                }}
+                disabled={!isFormValid}
+              >
+                {editId ? "Modify" : "Add"}
+              </button>
+            </div>
           </div>
-        </div>
         )}
         <div id="presentersPanel" className="wrapper">
-          <img src={LogoutIcon} alt="logout" id="logoutButton" onClick={handleLogout}/>
+          <img src={LogoutIcon} alt="logout" id="logoutButton" onClick={handleLogout} />
           <table>
             <thead>
               <tr>
                 <th>#</th>
                 <th>Name</th>
                 <th>Duration</th>
+                <th>Total time</th>
                 {isAdmin && (<th>Actions</th>)}
               </tr>
             </thead>
@@ -156,11 +167,12 @@ function MainView() {
                   <td>{index + 1}</td>
                   <td>{presenter.name}</td>
                   <td>{presenter.duration} min</td>
+                  <td>{/* total time */}</td>
                   {isAdmin && (
-                  <td>
-                    <img src={EditIcon} alt="logout" className="icon" onClick={() => handleEditPresenter(presenter)}/>
-                    <img src={DeleteIcon} alt="logout" className="icon" onClick={() => handleDeletePresenter(presenter.id)}/>
-                  </td>
+                    <td>
+                      <img src={EditIcon} alt="edit" className="icon" onClick={() => handleEditPresenter(presenter)} />
+                      <img src={DeleteIcon} alt="delete" className="icon" onClick={() => handleDeletePresenter(presenter.id)} />
+                    </td>
                   )}
                 </tr>
               ))}

@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase/firebaseConfig";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { collection, doc, setDoc } from "firebase/firestore"; // Import Firestore functions
-import { db } from "../firebase/firebaseConfig"; // Import your Firestore instance
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../firebase/firebaseConfig";
 import './../styles/AdminLogin.css';
 import BackIcon from './../resources/icons/arrow-left.svg';
 
@@ -12,24 +12,18 @@ function AdminLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
-
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
-      // Add admin ID to Firestore
-      const adminsCollection = collection(db, "admins");
-      const adminDoc = doc(adminsCollection, user.uid); // Use user.uid as document ID
-      await setDoc(adminDoc, { admin_id: user.uid }, { merge: true }); // Add or merge document
-
+      const adminDocRef = doc(db, "admins", user.uid);
+      await setDoc(adminDocRef, { admin_id: user.uid }, { merge: true });
       navigate("/main-view");
     } catch (err) {
       setError("Invalid email or password");
       console.error("Error signing in with email/password:", err);
     }
-  };
-
+  }, [auth, db, email, navigate, password]);
   return (
     <div id="adminLoginView">
       <img src={BackIcon} alt="back" id="backButton" className="icon" onClick={() => navigate("/")}/>
