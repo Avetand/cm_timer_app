@@ -34,9 +34,16 @@
     background-color: #efefef;
 }
 
+#header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
 #logoutButton {
-    align-self: flex-start;
-    margin-bottom: 20px;
     user-select: none;
     width: 20px;
     height: 20px;
@@ -44,7 +51,40 @@
     transition: transform 0.2s ease;
 }
 
-#logoutButton:hover {
+#clapButton {
+    font-size: 30px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+.claps-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+  
+.clap-emoji {
+    position: absolute;
+    font-size: 3em;
+    pointer-events: none;
+}
+
+#muteButton {
+    user-select: none;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.headerIcons:hover {
     transform: scale(1.2);
 }
 
@@ -104,6 +144,7 @@ table {
     overflow-x: auto;
     display: block;
     border: none;
+    border-collapse: collapse;
     font-size: 14px;
 }
 
@@ -149,6 +190,7 @@ table th {
     justify-content: center;
     align-items: center;
     min-width: 300px;
+    max-width: 300px;
     height: 300px;
     margin: 10px 0;
     padding: 20px;
@@ -163,6 +205,7 @@ table th {
 }
 
 #currentPresenter {
+    text-align: center;
     font-size: 18px;
 }
 

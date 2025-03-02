@@ -1,10 +1,13 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { auth } from "../firebase/firebaseConfig";
 import { useNavigate } from "react-router-dom";
-import { collection, addDoc, getDocs, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, onSnapshot, doc, deleteDoc, updateDoc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/firebaseConfig";
 import './../styles/MainView.css';
 import LogoutIcon from './../resources/icons/logout.svg';
+import MuteIcon from './../resources/icons/mute.svg';
+import UnmuteIcon from './../resources/icons/unmute.svg';
+import ClapSound from './../resources/sounds/claps.mp3';
 import EditIcon from './../resources/icons/edit.svg';
 import DeleteIcon from './../resources/icons/delete.svg';
 
@@ -23,7 +26,15 @@ function MainView() {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const [totalTimes, setTotalTimes] = useState({}); // Store total times for each presenter {presenterId: timeInSeconds}
+  const [totalTimes, setTotalTimes] = useState({});
+  const [currentStopwatchValues, setCurrentStopwatchValues] = useState({});
+
+  // Mute State
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Clap Emoji State
+  const [claps, setClaps] = useState([]);
+  const clapSoundRef = useRef(null);
 
   const isAdminCached = useMemo(() => {
     if (!user) return false;
@@ -119,46 +130,192 @@ function MainView() {
     return name && duration && duration > 0 && duration <= 60;
   }, [name, duration]);
 
-
   // Timer and Stopwatch Logic
+  const TIMER_DOC_ID = "currentTimerState";
+  const timerDocRef = doc(db, "timerStates", TIMER_DOC_ID);
+  const sessionsCollectionRef = collection(db, "sessions");
+  const actionsDocRef = doc(db, "actions", "currentAction");
+
+  const updateTimerStateInFirebase = useCallback(async (updates) => {
+    try {
+      await updateDoc(timerDocRef, updates);
+    } catch (error) {
+      console.error("Error updating timer state in Firebase:", error);
+    }
+  }, []);
 
   const startTimer = useCallback(() => {
-    if (presenters.length === 0) return; // Prevent starting with no presenters
-    setCurrentPresenterIndex(0);
-    setTimerSeconds(presenters[0].duration * 60); // Convert minutes to seconds
-    setStopwatchSeconds(0);
-    setIsRunning(true);
-  }, [presenters]);
+    if (presenters.length === 0) return;
+    const initialPresenter = presenters[0];
 
-  const nextPresenter = useCallback(() => {
+    const initialState = {
+      currentPresenterIndex: 0,
+      timerSeconds: initialPresenter.duration * 60,
+      stopwatchSeconds: 0,
+      isRunning: true
+    };
+
+    updateTimerStateInFirebase(initialState);
+    setCurrentStopwatchValues(prevValues => ({
+      ...prevValues,
+      [initialPresenter.id]: 0,
+    }));
+    setTotalTimes({});
+
+  }, [presenters, updateTimerStateInFirebase]);
+
+  const archiveSession = useCallback(async (sessionData) => {
+    try {
+      await addDoc(sessionsCollectionRef, sessionData);
+    } catch (error) {
+      console.error("Error archiving session:", error);
+    }
+  }, []);
+
+  const resetTotalTimes = useCallback(async () => {
+    try {
+      await updateDoc(timerDocRef, { totalTimes: {} });
+      setTotalTimes({});
+    } catch (error) {
+      console.error("Error resetting totalTimes in Firebase:", error);
+    }
+  }, []);
+
+  const nextPresenter = useCallback(async () => {
     if (!isRunning) return;
 
-    // Store the total time for the current presenter
+    const currentPresenterId = presenters[currentPresenterIndex].id;
+
+    setCurrentStopwatchValues(prevValues => ({
+      ...prevValues,
+      [currentPresenterId]: stopwatchSeconds,
+    }));
+
+    updateTimerStateInFirebase({
+        [`totalTimes.${currentPresenterId}`]: stopwatchSeconds,
+    });
     setTotalTimes(prevTimes => ({
       ...prevTimes,
-      [presenters[currentPresenterIndex].id]: stopwatchSeconds,
+      [currentPresenterId]: stopwatchSeconds
     }));
 
     const nextIndex = currentPresenterIndex + 1;
 
     if (nextIndex < presenters.length) {
-      setCurrentPresenterIndex(nextIndex);
-      setTimerSeconds(presenters[nextIndex].duration * 60);
-      setStopwatchSeconds(0); // Reset stopwatch for the new presenter
-    } else {
-      // Finish the presentation
-      setTotalTimes(prevTimes => ({
-        ...prevTimes,
-        [presenters[currentPresenterIndex].id]: stopwatchSeconds,
-      }));
-      setIsRunning(false);
-      setCurrentPresenterIndex(null);
-      setTimerSeconds(0);
-      setStopwatchSeconds(0);
-    }
-  }, [currentPresenterIndex, presenters, isRunning, stopwatchSeconds]);
+      const nextPresenter = presenters[nextIndex];
+      const nextState = {
+        currentPresenterIndex: nextIndex,
+        timerSeconds: nextPresenter.duration * 60,
+        stopwatchSeconds: 0,
+      };
+      updateTimerStateInFirebase(nextState);
 
-  // useEffect for Timer
+      setCurrentStopwatchValues(prevValues => ({
+        ...prevValues,
+        [nextPresenter.id]: 0,
+      }));
+
+    } else {
+      // Preparing session Data
+      const sessionData = presenters.map(presenter => ({
+        name: presenter.name,
+        duration: presenter.duration,
+        totalTime: totalTimes[presenter.id] || 0,
+        date: new Date().toISOString()
+      }));
+
+      // Storing session data to "sessions" collection
+      await archiveSession({sessionData});
+
+      // Resetting the timer state
+      const finishState = {
+        isRunning: false,
+        currentPresenterIndex: null,
+        timerSeconds: 0,
+        stopwatchSeconds: 0,
+      };
+      updateTimerStateInFirebase(finishState);
+
+      // Resetting totalTimes
+      await resetTotalTimes();
+
+      setCurrentStopwatchValues(prevValues => ({
+        ...prevValues,
+        [currentPresenterId]: stopwatchSeconds,
+      }));
+    }
+  }, [currentPresenterIndex, presenters, isRunning, stopwatchSeconds, updateTimerStateInFirebase, totalTimes, archiveSession, resetTotalTimes]);
+
+    // Mute/Unmute Logic
+    const toggleMute = useCallback(() => {
+      setIsMuted((prevMuted) => !prevMuted);
+    }, []);
+
+    useEffect(() => {
+      if (clapSoundRef.current) {
+        clapSoundRef.current.muted = isMuted;
+      }
+    }, [isMuted]);
+
+    // Clap Logic
+    const triggerClap = useCallback(() => {
+        if (clapSoundRef.current) {
+            clapSoundRef.current.play().catch(error => console.log("Playback prevented:", error));
+        }
+
+        const newClaps = Array.from({ length: 25 }, (_, index) => ({
+            id: Date.now() + index,
+            x: Math.random() * 80 + 10,
+            y: Math.random() * 50 + 20,
+            directionX: Math.random() * 2 - 1,
+            directionY: Math.random() * 2 - 1,
+            opacity: 1,
+        }));
+        setClaps(newClaps);
+    }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(timerDocRef, async (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        setCurrentPresenterIndex(data.currentPresenterIndex !== undefined ? data.currentPresenterIndex : null);
+        setTimerSeconds(data.timerSeconds !== undefined ? data.timerSeconds : 0);
+        setStopwatchSeconds(data.stopwatchSeconds !== undefined ?  data.stopwatchSeconds : 0);
+        setIsRunning(data.isRunning !== undefined ? data.isRunning : false);
+        setTotalTimes(data.totalTimes !== undefined ? data.totalTimes : {});
+      } else {
+        console.log("Timer document does not exist. Initializing...");
+        try {
+          await setDoc(timerDocRef, {
+            currentPresenterIndex: null,
+            timerSeconds: 0,
+            stopwatchSeconds: 0,
+            isRunning: false,
+            totalTimes: {}
+          });
+          setTotalTimes({});
+        } catch (error) {
+          console.error("Error creating timer state document in Firebase:", error);
+        }
+      }
+    });
+
+      const unsubscribeActions = onSnapshot(actionsDocRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          if (data.type === 'clap') {
+            triggerClap();
+          }
+        }
+      });
+
+    return () => {
+        unsubscribe();
+        unsubscribeActions();
+    };
+  }, [updateTimerStateInFirebase, triggerClap]);
+
+  // useEffect for Timer interval
   useEffect(() => {
     let interval = null;
 
@@ -166,13 +323,44 @@ function MainView() {
       interval = setInterval(() => {
         setTimerSeconds((prevSeconds) => prevSeconds - 1);
         setStopwatchSeconds((prevSeconds) => prevSeconds + 1);
+
+        const currentId = presenters[currentPresenterIndex].id;
+        setCurrentStopwatchValues(prevValues => ({
+          ...prevValues,
+          [currentId]: stopwatchSeconds,
+        }));
+
+        updateTimerStateInFirebase({
+          timerSeconds: timerSeconds - 1,
+          stopwatchSeconds: stopwatchSeconds + 1,
+        });
       }, 1000);
+    } else {
+      clearInterval(interval);
     }
 
-    return () => clearInterval(interval); // Cleanup on unmount or when isRunning changes
-  }, [isRunning, currentPresenterIndex]);
+    return () => clearInterval(interval);
+  }, [isRunning, currentPresenterIndex, presenters, stopwatchSeconds, timerSeconds, updateTimerStateInFirebase]);
 
-  // Format Time (mm:ss)
+    // Emoji Animation Effect
+    useEffect(() => {
+      const animationInterval = setInterval(() => {
+          setClaps(currentClaps => {
+              return currentClaps.map(clap => {
+                  const newOpacity = clap.opacity - 0.02;
+                  return {
+                      ...clap,
+                      x: clap.x + clap.directionX,
+                      y: clap.y + clap.directionY - 0.5,
+                      opacity: newOpacity > 0 ? newOpacity : 0,
+                  };
+              }).filter(clap => clap.opacity > 0);
+          });
+      }, 20);
+
+      return () => clearInterval(animationInterval);
+    }, []);
+
   const formatTime = (seconds) => {
     const minutes = Math.abs(Math.floor(seconds / 60));
     const remainingSeconds = Math.abs(seconds % 60);
@@ -180,7 +368,6 @@ function MainView() {
     return `${sign}${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
   };
 
-  // Overtime styling
   const timerStyle = {
     color: timerSeconds < 0 ? 'red' : 'black'
   };
@@ -188,6 +375,21 @@ function MainView() {
   const currentPresenter = useMemo(() => {
     return currentPresenterIndex !== null ? presenters[currentPresenterIndex] : null;
   }, [currentPresenterIndex, presenters]);
+
+  const getRowStyle = useCallback((index) => {
+    if (isRunning && currentPresenterIndex === index) {
+      return { backgroundColor: '#c8e6c9' };
+    }
+    return {};
+  }, [isRunning, currentPresenterIndex]);
+
+    const publishClap = useCallback(async () => {
+      try {
+        await setDoc(actionsDocRef, { type: 'clap', timestamp: Date.now() });
+      } catch (error) {
+        console.error("Error publishing clap action to Firebase:", error);
+      }
+    }, []);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -249,26 +451,53 @@ function MainView() {
         )}
 
         <div id="presentersPanel" className="wrapper">
-          <img src={LogoutIcon} alt="logout" id="logoutButton" onClick={handleLogout} />
+          <div id="header">
+            <img src={LogoutIcon} alt="logout" id="logoutButton" className="headerIcons" onClick={handleLogout} />
+            <button id="clapButton" onClick={publishClap}>👏</button>
+              <img
+                src={isMuted ? UnmuteIcon : MuteIcon}
+                alt="mute"
+                id="muteButton"
+                className="headerIcons"
+                onClick={toggleMute}
+              />
+             <audio ref={clapSoundRef} src={ClapSound} preload="auto" muted={isMuted} />
+          </div>
+          <div className="claps-container">
+            {claps.map(clap => (
+              <span
+                key={clap.id}
+                className="clap-emoji"
+                style={{
+                  left: `${clap.x}%`,
+                  top: `${clap.y}%`,
+                  opacity: clap.opacity,
+                  position: 'absolute',
+                  fontSize: '3em',
+                  pointerEvents: 'none',
+                }}
+              >
+                👏
+              </span>
+            ))}
+          </div>
           <table>
             <thead>
               <tr>
                 <th>#</th>
                 <th>Name</th>
                 <th>Duration</th>
-                {isRunning && (<th>Total time</th>)}
+                {isRunning && currentPresenter && (<th>Total time</th>)}
                 {isAdmin && !isRunning && (<th>Actions</th>)}
               </tr>
             </thead>
             <tbody>
               {presenters.map((presenter, index) => (
-                <tr key={presenter.id}>
+                <tr key={presenter.id} style={getRowStyle(index)}>
                   <td>{index + 1}</td>
                   <td>{presenter.name}</td>
                   <td>{presenter.duration} min</td>
-                  {isRunning && (
-                    <td>{formatTime(totalTimes[presenter.id] || 0)}</td>
-                  )}
+                  {isRunning && currentPresenter && (<td>{formatTime(currentStopwatchValues[presenter.id] || totalTimes[presenter.id] || 0)}</td>)}
                   {isAdmin && !isRunning && (
                     <td>
                       <img src={EditIcon} alt="edit" className="icon" onClick={() => handleEditPresenter(presenter)} />
